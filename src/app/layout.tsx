@@ -7,16 +7,15 @@ import ToasterWrapper from "@/components/ToasterWrapper";
 
 export const metadata: Metadata = {
   title: "HybridCrypto — AES-256 + RSA-2048 Document Security",
-  description:
-    "Implementasi Hybrid Cryptosystem menggunakan AES-256 dan RSA-2048 untuk pengamanan dokumen digital berbasis web",
+  description: "Implementasi Hybrid Cryptosystem menggunakan AES-256 dan RSA-2048 untuk pengamanan dokumen digital berbasis web",
   keywords: ["kriptografi", "AES-256", "RSA-2048", "hybrid cryptosystem", "enkripsi dokumen"],
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+  },
 };
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
 
   return (

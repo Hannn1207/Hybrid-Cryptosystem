@@ -1,0 +1,169 @@
+// Prisma Schema - Hybrid Cryptosystem
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Auth Models ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // hashed with bcrypt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  rsaKeyPairs   RsaKeyPair[]
+  documents     Document[]    @relation("SentDocuments")
+  received      Document[]    @relation("ReceivedDocuments")
+  activities    ActivityLog[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─── Cryptography Models ──────────────────────────────────────────────────────
+
+model RsaKeyPair {
+  id          String   @id @default(cuid())
+  userId      String
+  label       String   @default("Default Key Pair")
+  publicKey   String   @db.Text  // PEM format
+  privateKey  String   @db.Text  // PEM format (encrypted with user password)
+  keySize     Int      @default(2048)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents   Document[]
+
+  @@map("rsa_key_pairs")
+}
+
+model Document {
+  id                String         @id @default(cuid())
+  userId            String
+  rsaKeyPairId      String?
+  recipientId       String?        // NULL = enkripsi untuk diri sendiri
+
+  // File info
+  originalName      String
+  originalSize      Int            // bytes
+  mimeType          String
+  fileType          DocumentType
+
+  // Encrypted data (stored as base64 in DB or path to file)
+  encryptedData     String?        @db.Text  // base64 encoded encrypted file
+  encryptedAesKey   String         @db.Text  // RSA-encrypted AES key (base64)
+  aesIv             String         // AES IV (base64)
+  
+  // Status
+  status            DocumentStatus @default(ENCRYPTED)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Relations
+  user              User           @relation("SentDocuments", fields: [userId], references: [id], onDelete: Cascade)
+  recipient         User?          @relation("ReceivedDocuments", fields: [recipientId], references: [id], onDelete: SetNull)
+  rsaKeyPair        RsaKeyPair?    @relation(fields: [rsaKeyPairId], references: [id])
+  activities        ActivityLog[]
+
+  @@map("documents")
+}
+
+model ActivityLog {
+  id          String       @id @default(cuid())
+  userId      String
+  documentId  String?
+  action      ActivityType
+  description String
+  metadata    Json?        // additional info (file size, algo params, etc.)
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime     @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document    Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@map("activity_logs")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum DocumentType {
+  PDF
+  DOCX
+  DOC
+  TXT
+  OTHER
+}
+
+enum DocumentStatus {
+  ENCRYPTED
+  DECRYPTED
+  DELETED
+}
+
+enum ActivityType {
+  UPLOAD
+  ENCRYPT
+  DECRYPT
+  DOWNLOAD
+  TRANSFER
+  KEY_GENERATE
+  KEY_DELETE
+  LOGIN
+  LOGOUT
+  REGISTER
+}

@@ -1,4 +1,33 @@
 import NextAuth from "next-auth";
+import fs from "fs";
+import path from "path";
+
+// In development, load .env.local or .env so you can "import" env files locally
+if (process.env.NODE_ENV !== "production") {
+  try {
+    // prefer .env.local (Next.js convention), fallback to .env
+    const localPath = path.resolve(process.cwd(), ".env.local");
+    const envPath = path.resolve(process.cwd(), ".env");
+    // dynamic require so bundlers don't include dotenv in production client bundles
+    const dotenv = require("dotenv");
+    if (fs.existsSync(localPath)) dotenv.config({ path: localPath });
+    else if (fs.existsSync(envPath)) dotenv.config({ path: envPath });
+  } catch (err) {
+    // ignore — env may already be loaded by Next.js
+  }
+}
+
+// Ensure sensible defaults and helpful warnings
+process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+if (!process.env.NEXTAUTH_SECRET) {
+  // only warn (do not throw) so local development can continue, but remind user to set secret
+  // This secret should be set in Vercel (production) and in .env.local for local testing
+  // Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  // eslint-disable-next-line no-console
+  console.warn(
+    "Warning: NEXTAUTH_SECRET is not set. Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\" and set NEXTAUTH_SECRET in your .env.local or Vercel env vars.",
+  );
+}
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -21,12 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       authorization: {
         params: {
           // Request Gmail send permission alongside normal OAuth scopes
-          scope: [
-            "openid",
-            "email",
-            "profile",
-            "https://www.googleapis.com/auth/gmail.send",
-          ].join(" "),
+          scope: ["openid", "email", "profile", "https://www.googleapis.com/auth/gmail.send"].join(" "),
           access_type: "offline",
           prompt: "consent",
         },
@@ -49,10 +73,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!user || !user.password) return null;
 
-        const isValid = await bcrypt.compare(
-          credentials.password as string,
-          user.password
-        );
+        const isValid = await bcrypt.compare(credentials.password as string, user.password);
 
         if (!isValid) return null;
 
